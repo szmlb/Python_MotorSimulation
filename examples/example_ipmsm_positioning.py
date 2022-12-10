@@ -4,7 +4,7 @@ sys.path.append('../')
 import numpy as np
 from simulation.simulation import *
 
-def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, external_inputs):
+def IPMSM_positioning(simulation_time, plant_parameters, control_parameters, external_inputs):
 
     # state parameters and data for plot
     id_data=[]
@@ -26,9 +26,10 @@ def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, ext
     J=plant_parameters[1]
     B=plant_parameters[2]
     R=plant_parameters[3]
-    L=plant_parameters[4]
-    Ke=plant_parameters[5]
-    P=plant_parameters[6]
+    Ld=plant_parameters[4]
+    Lq=plant_parameters[5]
+    Ke=plant_parameters[6]
+    P=plant_parameters[7]
 
     Kpp = control_parameters[0]
     Kpv = control_parameters[1]
@@ -42,14 +43,14 @@ def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, ext
 
     # simulation object
     sim_env = SimulationEnvironment(sampling_time = sampling_time)
-    SPMSM_motor = SPMSM(L=L, Ke=Ke, R=R, P=P, sampling_time=sim_env.sampling_time, control_sampling_time=sampling_time)
+    IPMSM_motor = IPMSM(Ld=Ld, Lq=Lq, Ke=Ke, R=R, P=P, sampling_time=sim_env.sampling_time, control_sampling_time=sampling_time)
     rigid_rotor = RigidRotor(J=J, B=B, sampling_time = sim_env.sampling_time, control_sampling_time=sampling_time)
 
     # main loop 10[sec]
     for i in range(int(simulation_time*(1/sim_env.sampling_time))):
         time = i * sim_env.sampling_time
 
-        control_delay = (int)(SPMSM_motor.control_sampling_time/sim_env.sampling_time) #[sample]
+        control_delay = (int)(IPMSM_motor.control_sampling_time/sim_env.sampling_time) #[sample]
         if i%control_delay == 0:
             """ controller """
             # definition for control parameters
@@ -68,18 +69,18 @@ def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, ext
             # current controller (PI current feedback control)
             # d current control: Id = 0
             id_cmd = 0.0
-            id_err = id_cmd - SPMSM_motor.xvec[0]
-            id_err_int = id_err_int + id_err * SPMSM_motor.control_sampling_time
+            id_err = id_cmd - IPMSM_motor.xvec[0]
+            id_err_int = id_err_int + id_err * IPMSM_motor.control_sampling_time
             vd = Kpi * id_err + Kii * id_err_int
             # q current control
-            iq_err = iq_ref - SPMSM_motor.xvec[1]
-            iq_err_int = iq_err_int + iq_err * SPMSM_motor.control_sampling_time
+            iq_err = iq_ref - IPMSM_motor.xvec[1]
+            iq_err_int = iq_err_int + iq_err * IPMSM_motor.control_sampling_time
             vq = Kpi * iq_err + Kii * iq_err_int
 
             #data update
             time_data.append(time)
-            id_data.append(SPMSM_motor.xvec[0])
-            iq_data.append(SPMSM_motor.xvec[1])
+            id_data.append(IPMSM_motor.xvec[0])
+            iq_data.append(IPMSM_motor.xvec[1])
             qm_data.append(rigid_rotor.xvec[0])
             dqm_data.append(rigid_rotor.xvec[1])
             qm_cmd_data.append(qm_cmd[i])
@@ -97,11 +98,11 @@ def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, ext
         """ plant """
 
         # derivative calculation
-        rigid_rotor.dxvec = rigid_rotor.calc_deri(SPMSM_motor.torque, torque_reac[i])
-        SPMSM_motor.dxvec = SPMSM_motor.calc_deri(vd, vq, rigid_rotor.xvec[1])
+        rigid_rotor.dxvec = rigid_rotor.calc_deri(IPMSM_motor.torque, torque_reac[i])
+        IPMSM_motor.dxvec = IPMSM_motor.calc_deri(vd, vq, rigid_rotor.xvec[1])
         # euler-integration
         rigid_rotor.update()
-        SPMSM_motor.update()
+        IPMSM_motor.update()
 
         """ plant end """
 
@@ -158,21 +159,23 @@ def SPMSM_positioning(simulation_time, plant_parameters, control_parameters, ext
 
     plt.show()
 
+
 if __name__ == "__main__":
 
     simulation_time = 3.0
     sampling_time = 0.0001 # 100 us
 
     #################################################################
-    ### example 1 SPMSM positioning
+    ### example 2 IPMSM positioning
     #################################################################
-    L=3.9*0.001
+    Ld=3.9*0.001
+    Lq=7.9*0.001
     Ke=47.21*0.001
     R=154.9*0.001
     P=3
     J=0.1
     B=0.001
-    plant_parameters = [sampling_time, J, B, R, L, Ke, P]
+    plant_parameters = [sampling_time, J, B, R, Ld, Lq, Ke, P]
 
     # Command
     qm_cmd = []
@@ -201,9 +204,9 @@ if __name__ == "__main__":
     Kpp = 2.0                         # P gain for velocity control loop
     Kpv = 10.0                           # P gain for velocity control loop
     Kiv = 0.5                          # I gain for velocity control loop
-    Kpi = 1.0                           # P gain for current control loop
-    Kii = 1.0                          # I gain for current control loop
+    Kpi = 5.0                           # P gain for current control loop
+    Kii = 1.5                          # I gain for current control loop
     control_parameters = [Kpp, Kpv, Kiv, Kpi, Kii]
 
     # Simulation
-    SPMSM_positioning(simulation_time, plant_parameters, control_parameters, external_inputs)
+    IPMSM_positioning(simulation_time, plant_parameters, control_parameters, external_inputs)
